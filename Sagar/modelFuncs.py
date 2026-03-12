@@ -25,6 +25,19 @@ def dataExtracterMonths(ticker, startDate, endDate):
     print(f"The dataset has observations across {len(obs)} months")
     return obs
 
+def dataExtracterDays(ticker, startDate, endDate):
+    data = yf.download(ticker, start=startDate, end=endDate)
+    data = data.reset_index()[["Date", "Open", "High", "Low", "Close"]]
+    data.columns = data.columns.droplevel(1)
+    data.columns.name = None
+    # Convert 'Date' column to datetime type
+    obs = data
+
+    # --- Convert dates to just YYYY-MM-DD ---
+    obs['Date'] = obs['Date'].dt.date  # <-- this removes the timestamp
+    print(f"The dataset has observations across {len(obs)} days")
+    return obs
+
 
 def HMMPricePredictor(data, obs, window_size, Ncomp):
     # Calculate number of rows and set training window
@@ -88,7 +101,6 @@ def HMMPricePredictor(data, obs, window_size, Ncomp):
     # print("HMM Prices: ")
     # print(hmm_price)
 
-    # Plot the predicted and observed prices
     close = []
     truncated_obs = obs.iloc[T-predict_size:T]
     for i in truncated_obs['Close']:
