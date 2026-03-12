@@ -44,3 +44,8 @@ def rmse(real_, pred_):
   RMSE = np.sqrt(sum)
   return RMSE
 
+def direction_accuracy(real_, pred_):
+  directReal = np.sign(np.diff(real_))
+  directPred = np.sign(np.diff(pred_))
+  direction_accuracy = np.mean(directReal == directPred)
+  return direction_accuracy
