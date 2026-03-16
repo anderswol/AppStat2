@@ -42,7 +42,6 @@ def dataExtracterDays(ticker, startDate, endDate):
 def HMMPricePredictor(data, obs, window_size, Ncomp):
     # Calculate number of rows and set training window
     T = data.shape[0]
-    # print("T= ", T)
 
     # Define the size of the training window
     predict_size = len(obs) - len(data) # Data points to predict
@@ -59,7 +58,7 @@ def HMMPricePredictor(data, obs, window_size, Ncomp):
         train_data = train_data.dropna()
 
         # Set the random seed
-        np.random.seed(123)
+        np.random.seed(1)
 
         if(first_time):
             first_time = False
@@ -96,10 +95,6 @@ def HMMPricePredictor(data, obs, window_size, Ncomp):
 
         hmm_price.append(close_price)
         T=T+1
-
-    # Print the calculated prices
-    # print("HMM Prices: ")
-    # print(hmm_price)
 
     close = []
     truncated_obs = obs.iloc[T-predict_size:T]
