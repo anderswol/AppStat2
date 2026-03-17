@@ -3,6 +3,8 @@ import yfinance as yf
 from hmmlearn import hmm
 import numpy as np
 
+
+#For data:
 def dataExtracterMonths(ticker, startDate, endDate):
     data = yf.download(ticker, start=startDate, end=endDate)
     data = data.reset_index()[["Date", "Open", "High", "Low", "Close"]]
@@ -38,8 +40,31 @@ def dataExtracterDays(ticker, startDate, endDate):
     print(f"The dataset has observations across {len(obs)} days")
     return obs
 
+def dataCutter(obs, train_share):
+    split_index = int(len(obs) * train_share)
+    train = obs[:split_index]
 
-def HMMPricePredictor(data, obs, window_size, Ncomp):
+    start_date = obs['Date'][split_index]
+    print("The training data ends on: ", start_date)
+    
+    obs = obs[obs.columns[1:5]]
+    train = train[train.columns[1:5]]
+
+    predict_size = len(obs)-len(train)
+    print("We are trying to predict the next ", predict_size, " units of time (e.g. days, months...).")
+
+    return obs, train, start_date, predict_size
+
+
+#To predict:
+def HMMPricePredictor(data, obs, window_size, Ncomp, use_log=False):
+    #If use_log, predict log of close price, otherwise predict close price directly
+    if use_log:
+        data = data.copy()
+        obs = obs.copy()
+        data['Close'] = np.log(data['Close'])
+        obs['Close'] = np.log(obs['Close'])
+
     # Calculate number of rows and set training window
     T = data.shape[0]
 
@@ -100,10 +125,15 @@ def HMMPricePredictor(data, obs, window_size, Ncomp):
     truncated_obs = obs.iloc[T-predict_size:T]
     for i in truncated_obs['Close']:
         close.append(i)
+
+    if use_log:
+        hmm_price = np.exp(hmm_price)
+        close = np.exp(close)
+        
     return hmm_price, close
 
 
-#From Sagar:
+#From Sagar, to evaluate:
 # 1. Absolute Percentage Error (APE)
 def ape(real_, pred_):
     APE = 0
