@@ -2,20 +2,24 @@ import numpy as np
 
 # 1. Absolute Percentage Error (APE)
 def ape(real_, pred_):
-    APE = 0
-    sum = 0
-    N = len(real_)
-    # Calculate the sum of absolute differences between real and predicted values
-    for i in range(1, N):
-        sum += (np.abs(real_[i] - pred_[i])) / N
+  real_ = np.asarray(real_).flatten()
+  pred_ = np.asarray(pred_).flatten()
+  APE = 0
+  sum = 0
+  N = len(real_)
+  # Calculate the sum of absolute differences between real and predicted values
+  for i in range(1, N):
+      sum += (np.abs(real_[i] - pred_[i])) / N
 
-    # Calculate APE as a ratio of the sum to the mean of real values
-    APE = sum / (np.mean(real_))
+  # Calculate APE as a ratio of the sum to the mean of real values
+  APE = sum / (np.mean(real_))
 
-    return APE
+  return APE
 
 # 2. Average Absolute Error (AAE)
 def aae(real_, pred_):
+  real_ = np.asarray(real_).flatten()
+  pred_ = np.asarray(pred_).flatten()
   AAE = 0
   sum = 0
   N = len(real_)
@@ -27,7 +31,8 @@ def aae(real_, pred_):
 
 # 3. Average Relative Percentage Error (ARPE)
 def arpe(real_, pred_):
-
+  real_ = np.asarray(real_).flatten()
+  pred_ = np.asarray(pred_).flatten()
   sum = 0
   N = len(real_)
   for i in range(1,N):
@@ -37,6 +42,8 @@ def arpe(real_, pred_):
 
 # 4. Root Mean Squared Error (RMSE)
 def rmse(real_, pred_):
+  real_ = np.asarray(real_).flatten()
+  pred_ = np.asarray(pred_).flatten()
   sum = 0
   N = len(real_)
   for i in range(1,N):
@@ -45,6 +52,8 @@ def rmse(real_, pred_):
   return RMSE
 
 def direction_accuracy(real_, pred_):
+  real_ = np.asarray(real_).flatten()
+  pred_ = np.asarray(pred_).flatten()
   directReal = np.sign(np.diff(real_))
   directPred = np.sign(np.diff(pred_))
   direction_accuracy = np.mean(directReal == directPred)
