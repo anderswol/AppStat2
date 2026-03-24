@@ -2,6 +2,9 @@ import pandas as pd
 import yfinance as yf
 from hmmlearn import hmm
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+
 
 def dataExtracterMonths(ticker, startDate, endDate):
     data = yf.download(ticker, start=startDate, end=endDate)
@@ -38,140 +41,66 @@ def dataExtracterDays(ticker, startDate, endDate):
     print(f"The dataset has observations across {len(obs)} days")
     return obs
 
-
-def HMMPricePredictor(data, obs, window_size, Ncomp):
-    # Calculate number of rows and set training window
-    T = data.shape[0]
-    # print("T= ", T)
-
-    # Define the size of the training window
-    predict_size = len(obs) - len(data) # Data points to predict
-    hmm_price = []
-
-    temp_T = T
-    first_time = True
-
-    # Sliding window approach to predict future prices
-    while T < temp_T + predict_size:
-
-        # Train HMM on data from T-window_size+1 to T
-        train_data = obs.iloc[T-window_size:T]
-        train_data = train_data.dropna()
-
-        # Set the random seed
-        np.random.seed(123)
-
-        if(first_time):
-            first_time = False
-            model = hmm.GaussianHMM(n_components=Ncomp)
-        else:
-            old_model= model
-            model = hmm.GaussianHMM(n_components=Ncomp, init_params="c")
-            model.startprob_ = old_model.startprob_
-            model.transmat_ = old_model.transmat_
-            model.means_ = old_model.means_
-
-        model.fit(train_data)
-
-        # Calculate original likelihood
-        original_likelihood = model.score(train_data)
-
-        # Loop to find new likelihood
-        t=T
-        min_diff = float('inf')
-        min_t = T
-        min_likelihood = original_likelihood
-        while t-window_size>  0:
-            t = t-1
-
-            train_data = obs.iloc[t-window_size:t]
-            new_likelihood = model.score(train_data)
-            if (abs(new_likelihood - original_likelihood))< min_diff:  # Threshold for comparison by choosing that new_likelihood which is minimum
-                min_diff = abs(new_likelihood - original_likelihood)
-                min_t = t
-                min_likelihood = new_likelihood
-
-        # Calculate the predicted close price
-        close_price = obs['Close'][T-1] + ((obs['Close'][min_t + 1] - obs['Close'][min_t]) * np.sign(original_likelihood - min_likelihood))
-
-        hmm_price.append(close_price)
-        T=T+1
-
-    close = []
-    truncated_obs = obs.iloc[T-predict_size:T]
-    for i in truncated_obs['Close']:
-        close.append(i)
-    return hmm_price, close
-
-
-def HMMPricePredictor_pct(data, obs, window_size, Ncomp=5):
-    # Calculate number of rows and set training window
-    T = data.shape[0]
-    # print("T= ", T)
-
-    # Define the size of the training window
-    predict_size = len(obs) - len(data) # Data points to predict
-    hmm_price = []
+def HMM_predict(obsData, train_size, window_size, Ncomp, doprint=False):
+    rng = np.random.default_rng(123)
+    obs = obsData.copy()
+    train = obs[:train_size]
+    features = ['LogReturn', 'Volatility', 'Momentum']
+    train_data = train[features].values
+    
+    #Normalize data:
+    train_scaled = scaler.fit_transform(train_data)
+    # Train global HMM
+    model = hmm.GaussianHMM(n_components=Ncomp, random_state=123)
+    model.fit(train_scaled)
+    
+    means = model.means_
+    stds = np.sqrt(model._covars_)
+    first = True
+    if doprint:
+        print("State-wise means:", np.round(means.flatten(), 3))
+        print("State-wise std:", stds.flatten())
+        print("State counts:", np.bincount(model.predict(train_scaled)))
+        print(np.sum(np.isnan(train_data)))
+        print(np.round(model.transmat_, 2))
+        first = True
+    
+    T = max(window_size, train_size)
+    predictions = []
+    returns = []
     expected_pct_changes = []
-    close_index = obs.columns.get_loc('Close')
+    while T < len(obs):
+        window = obs[features].iloc[T-window_size:T].values
+        window_scaled = scaler.transform(window)
 
-    temp_T = T
-    first_time = True
+        # Predict the current state based on the most recent window
+        current_state = model.predict(window_scaled)[-1]
 
-    # Sliding window approach to predict future prices
-    while T < temp_T + predict_size:
+        # Choose the most likely next state based on transition probabilities
+        next_state = rng.choice(np.where(model.transmat_[current_state] == np.max(model.transmat_[current_state]))[0])  
 
-        # Train HMM on data from T-window_size+1 to T
-        train_data = obs.iloc[T-window_size:T]
-        train_data = train_data.dropna()
+        # Sample a return from the predicted next state
+        predicted_return_scaled = rng.normal(loc=means[next_state][0], scale=stds[next_state][0])
 
-        # Set the random seed
-        np.random.seed(123)
+        dummy = np.zeros((1, len(features)))
+        dummy[0, 0] = predicted_return_scaled
 
-        if(first_time):
-            first_time = False
-            model = hmm.GaussianHMM(n_components=Ncomp)
-        else:
-            old_model= model
-            model = hmm.GaussianHMM(n_components=Ncomp, init_params="c")
-            model.startprob_ = old_model.startprob_
-            model.transmat_ = old_model.transmat_
-            model.means_ = old_model.means_
+        predicted_log_return = scaler.inverse_transform(dummy)[0, 0]
+        
 
-        model.fit(train_data)
+        # Convert to price
+        last_price = obs['Close'].iloc[T-1]
+        predicted_price = last_price * np.exp(predicted_log_return)
+        if first:
+            print(f"Date for day before first prediction: {obs['Date'].iloc[T-1]}")
+            print(f"Date for first day of real data: {obs['Date'].iloc[train_size]}")
+            first = False
 
-        # Calculate original likelihood
-        original_likelihood = model.score(train_data)
+        returns.append(predicted_log_return)
+        predictions.append(predicted_price)
+        expected_pct_changes.append(np.exp(predicted_log_return) - 1)
+        T += 1
 
-        # Loop to find new likelihood
-        t=T
-        min_diff = float('inf')
-        min_t = T
-        min_likelihood = original_likelihood
-        while t-window_size>  0:
-            t = t-1
+    close = obs['Close'].iloc[train_size:].values
 
-            train_data = obs.iloc[t-window_size:t]
-            new_likelihood = model.score(train_data)
-            if (abs(new_likelihood - original_likelihood))< min_diff:  # Threshold for comparison by choosing that new_likelihood which is minimum
-                min_diff = abs(new_likelihood - original_likelihood)
-                min_t = t
-                min_likelihood = new_likelihood
-
-        # Calculate the predicted close price
-        close_price = obs['Close'][T-1] + ((obs['Close'][min_t + 1] - obs['Close'][min_t]) * np.sign(original_likelihood - min_likelihood))
-
-        hmm_price.append(close_price)
-        T=T+1
-        current_price = obs['Close'].iloc[T-1]
-        states = model.predict(train_data)
-        current_state = states[-1]
-        expected_price_state = np.dot(model.transmat_[current_state], model.means_[:, close_index])
-        expected_pct_changes.append((expected_price_state - current_price) / current_price)
-
-    close = []
-    truncated_obs = obs.iloc[T-predict_size:T]
-    for i in truncated_obs['Close']:
-        close.append(i)
-
-    return hmm_price, close, expected_pct_changes
+    return predictions, close, returns, expected_pct_changes
